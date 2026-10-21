@@ -1,7 +1,7 @@
 # Functional test cases
 
-**Run date:** 2026-10-21  
-**Result:** 19 automated API cases and one local SMTP-timeout case passed. The runner uses an isolated database, disables SMTP for workflow tests, uses a fake local SMTP server for the timeout check, removes generated test PDFs and records, and stops its isolated server when finished. It sends no email to an external recipient.
+**Last run:** 2026-10-22  
+**Result:** All 19 automated API workflow cases and the local SMTP-timeout case passed. The runner uses an isolated database, disables SMTP for workflow tests, uses a fake local SMTP server for the timeout check, removes generated test PDFs and records, and stops its isolated server when finished. It sends no email to an external recipient.
 
 Run from the project folder after `start-app.ps1` has initialized the local runtime:
 
@@ -38,10 +38,30 @@ Run from the project folder after `start-app.ps1` has initialized the local runt
 
 | Check | Result |
 |---|---|
-| Local admin dashboard renders in the browser; database/API health indicators are online | PASS |
-| Vite production build | PASS |
-| Frontend and API on the normal local ports (`5173` and `5000`) | PASS after backend restart |
-| Password reset form renders with both password fields | PASS |
+| Public GitHub Pages sign-in route renders | PASS (2026-10-22) |
+| Public registration route renders with department and year selectors | PASS (2026-10-22) |
+| Public password-recovery route renders | PASS (2026-10-22) |
+| Public frontend browser console | PASS; no errors observed (2026-10-22) |
+| GitHub Pages frontend build and deployment | PASS (latest published workflow) |
+| Local frontend/API ports (`5173` and `5000`) available for browser-to-API testing | NOT RUN; both ports were offline during this check |
+
+## Browser checklist for a local full-stack run
+
+The API suite above covers these workflows against an isolated backend. To check the visible application with a local backend, run `start-app.ps1` and repeat these browser steps:
+
+| ID | Area | Browser action | Expected result |
+|---|---|---|---|
+| UI-01 | Authentication | Sign in with an active account and sign out | Correct dashboard opens; sign-out returns to login |
+| UI-02 | Registration | Submit a valid student registration, then sign in | Account is created once and student dashboard opens |
+| UI-03 | Validation | Submit incomplete or mismatched registration fields | Inline validation blocks submission and explains the issue |
+| UI-04 | Administration | Create an advisor/HOD account and a document type | Saved records appear in admin lists |
+| UI-05 | Student request | Choose a document type, complete its fields, and submit | Request details and current approval stage appear |
+| UI-06 | Approval | Sign in as each approver and approve in sequence | Request advances; final approval generates a downloadable, verifiable PDF |
+| UI-07 | Revision and rejection | Request a revision, resubmit, then reject a separate request with a reason | Student sees the revision/rejection state and comments |
+| UI-08 | Notifications | Open the notification menu and mark items read | Notifications and unread count update |
+| UI-09 | Direct routes | Open `/requests/all` directly on Pages | SPA fallback loads the app; unauthenticated access redirects to the app login route |
+
+UI-01 through UI-08 were exercised at the API level by FT-02 through FT-19, but not through browser form submissions in this run because the local frontend/API servers were stopped. UI-09 was checked directly in the deployed browser frontend on 2026-10-22.
 
 ## Limitations found
 
@@ -49,4 +69,4 @@ Run from the project folder after `start-app.ps1` has initialized the local runt
 - **Real email delivery:** The test runner intentionally does not contact the configured SMTP provider or send email. In-app notifications, missing-SMTP recovery, and a stalled local SMTP connection were tested. Delivery to an actual mailbox remains unverified.
 - **Forgot password with SMTP configured:** The code now sends a single-use, expiring reset link and the reset route works with a valid token. Actual SMTP delivery is not verified by this suite.
 
-The smoke suite is a functional check of the implemented local workflows; it is not a production security, load, accessibility, or institutional-policy audit.
+The smoke suite is a functional check of the implemented local workflows; it is not a production security, load, accessibility, or institutional-policy audit. The public GitHub Pages frontend uses the viewer's own `http://localhost:5000/api`; it does not provide a shared hosted backend or shared college data.
