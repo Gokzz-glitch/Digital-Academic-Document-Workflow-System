@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile } from '../../api/auth.api';
+import { updateProfile, changePassword } from '../../api/auth.api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [formData, setFormData] = useState({
     name: user?.name || '',
     phone: user?.phone || ''
@@ -22,8 +22,8 @@ const ProfilePage = () => {
     setLoading(true);
     try {
       await updateProfile(formData);
+      await refreshUser();
       toast.success('Profile updated successfully');
-      // Idealy, we'd refetch the user context here
     } catch (error) {
       toast.error('Failed to update profile');
     } finally {
@@ -38,7 +38,7 @@ const ProfilePage = () => {
     }
     setLoading(true);
     try {
-      await updateProfile({ 
+      await changePassword({
         currentPassword: passwords.currentPassword,
         newPassword: passwords.newPassword
       });

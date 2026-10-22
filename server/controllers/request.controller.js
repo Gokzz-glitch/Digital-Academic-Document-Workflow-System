@@ -4,7 +4,10 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { getNextApprover } = require('../services/workflow.service');
 const { sendRequestSubmittedEmail } = require('../services/email.service');
+const { validateFormData } = require('../services/requestValidation.service');
 const { ErrorResponse } = require('../middleware/errorHandler');
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 exports.createRequest = async (req, res, next) => {
   try {
@@ -14,6 +17,9 @@ exports.createRequest = async (req, res, next) => {
     if (!documentType || !documentType.isActive) {
       return next(new ErrorResponse('Document type not found', 404));
     }
+
+    const formValidationError = validateFormData(documentType, formData);
+    if (formValidationError) return next(new ErrorResponse(formValidationError, 400));
 
     const request = new Request({
       student: req.user._id,
@@ -161,7 +167,7 @@ exports.getAllRequests = async (req, res, next) => {
     const query = {};
     if (req.query.status) query.status = req.query.status;
     if (req.query.search) {
-      const term = req.query.search.trim();
+      const term = escapeRegex(req.query.search.trim());
       const matchingStudents = await User.find({ $or: [
         { name: { $regex: term, $options: 'i' } },
         { rollNumber: { $regex: term, $options: 'i' } },

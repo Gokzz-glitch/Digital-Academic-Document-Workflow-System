@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'DigitalAcademicDocumentWorkflowSystem\app'
+$runtimeServer = Join-Path $runtimeRoot 'server'
+$sourceServer = Join-Path $projectRoot 'server'
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $port = Get-Random -Minimum 20000 -Maximum 60000
 while (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
@@ -11,11 +13,27 @@ $logs = Join-Path $env:TEMP ('DADWS-Logs-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $serverProcess = $null
 $mongoProcess = $null
-$environmentNames = @('PORT','APP_DATA_DIR','CLIENT_URL','NODE_ENV','APP_RUNTIME_ROOT','TEST_API_URL','TEST_MONGO_URI','SMTP_HOST','SMTP_USER','SMTP_PASS')
+$environmentNames = @('PORT','APP_DATA_DIR','CLIENT_URL','NODE_ENV','APP_RUNTIME_ROOT','TEST_API_URL','TEST_MONGO_URI','SMTP_HOST','SMTP_USER','SMTP_PASS','MONGO_URI','JWT_SECRET','BOOTSTRAP_ADMIN_EMAIL','BOOTSTRAP_ADMIN_PASSWORD','TEST_ADMIN_EMAIL','TEST_ADMIN_PASSWORD')
 $savedEnvironment = @{}
 foreach ($name in $environmentNames) {
     $item = Get-Item -Path "Env:$name" -ErrorAction SilentlyContinue
     $savedEnvironment[$name] = if ($item) { $item.Value } else { $null }
+}
+$testAdminEmail = 'functional-admin-' + [guid]::NewGuid().ToString('N') + '@example.com'
+$testAdminPassword = 'SmokeAdmin#' + [guid]::NewGuid().ToString('N')
+$secretBytes = New-Object byte[] 48
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($secretBytes)
+$testJwtSecret = [Convert]::ToBase64String($secretBytes)
+
+if (!(Test-Path -LiteralPath (Join-Path $runtimeServer 'node_modules\express\index.js'))) {
+    throw 'The app runtime dependencies are missing. Start the app once with start-app.ps1, then rerun the isolated tests.'
+}
+foreach ($relativePath in @('config','controllers','middleware','models','routes','services')) {
+    & robocopy.exe (Join-Path $sourceServer $relativePath) (Join-Path $runtimeServer $relativePath) /E /NFL /NDL /NJH /NJS /NS /NC /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "Could not sync current server source for the test run ($relativePath, robocopy $LASTEXITCODE)." }
+}
+foreach ($file in @('server.js','seed.js')) {
+    Copy-Item -LiteralPath (Join-Path $sourceServer $file) -Destination (Join-Path $runtimeServer $file) -Force
 }
 
 try {
@@ -27,6 +45,14 @@ try {
     $env:SMTP_HOST = ''
     $env:SMTP_USER = ''
     $env:SMTP_PASS = ''
+    # Force the temporary database path and predictable test-only bootstrap credentials.
+    $env:MONGO_URI = ''
+    $env:JWT_SECRET = $testJwtSecret
+    $env:BOOTSTRAP_ADMIN_EMAIL = $testAdminEmail
+    $env:BOOTSTRAP_ADMIN_PASSWORD = $testAdminPassword
+    $env:TEST_ADMIN_EMAIL = $testAdminEmail
+    $env:TEST_ADMIN_PASSWORD = $testAdminPassword
+    Write-Host "Starting isolated API test server on port $port..." -ForegroundColor Cyan
     $serverProcess = Start-Process -FilePath $node -ArgumentList 'server.js' `
         -WorkingDirectory (Join-Path $runtimeRoot 'server') -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $logs 'server.out.log') `
@@ -38,6 +64,7 @@ try {
             $health = Invoke-RestMethod "http://127.0.0.1:$port/api/health" -TimeoutSec 2
             if ($health.status -eq 'ready') { $ready = $true; break }
         } catch {}
+        if ($i -gt 0 -and $i % 10 -eq 0) { Write-Host "Waiting for isolated API startup ($i/45)..." -ForegroundColor DarkGray }
         Start-Sleep -Seconds 1
     }
     if (!$ready) {
@@ -58,6 +85,7 @@ try {
     $env:APP_RUNTIME_ROOT = $runtimeRoot
     $env:TEST_API_URL = "http://127.0.0.1:$port/api"
     $env:TEST_MONGO_URI = "mongodb://127.0.0.1:$mongoPort/test"
+    Write-Host 'Running API workflow cases against isolated data...' -ForegroundColor Cyan
     & $node (Join-Path $PSScriptRoot 'functional-smoke.js')
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Test server logs: $logs" -ForegroundColor Yellow

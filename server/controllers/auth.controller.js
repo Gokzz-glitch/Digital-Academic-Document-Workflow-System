@@ -21,6 +21,10 @@ const sendTokenResponse = (user, statusCode, res) => {
       email: user.email,
       role: user.role,
       department: user.department,
+      year: user.year,
+      section: user.section,
+      rollNumber: user.rollNumber,
+      phone: user.phone,
     },
   });
 };
@@ -28,14 +32,15 @@ const sendTokenResponse = (user, statusCode, res) => {
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, department, year, section, rollNumber, phone } = req.body;
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
 
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return next(new ErrorResponse('Email already exists', 400));
     }
 
     const user = await User.create({
-      name, email, password, role: 'student', department, year, section, rollNumber, phone
+      name, email: normalizedEmail, password, role: 'student', department, year, section, rollNumber, phone
     });
 
     sendTokenResponse(user, 201, res);
@@ -47,12 +52,13 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return next(new ErrorResponse('Please provide an email and password', 400));
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       return next(new ErrorResponse('Invalid credentials', 401));
     }
@@ -101,13 +107,38 @@ exports.updateProfile = async (req, res, next) => {
   }
 };
 
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return next(new ErrorResponse('Please provide your current and new password', 400));
+    }
+    if (newPassword.length < 6) {
+      return next(new ErrorResponse('New password must be at least 6 characters', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user || !(await user.matchPassword(currentPassword))) {
+      return next(new ErrorResponse('Current password is incorrect', 400));
+    }
+
+    user.password = newPassword;
+    await user.save();
+    res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.forgotPassword = async (req, res, next) => {
   try {
     if (!isEmailConfigured()) {
       return next(new ErrorResponse('Password reset is unavailable because email is not configured.', 503));
     }
 
-    const user = await User.findOne({ email: req.body.email });
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email) return next(new ErrorResponse('Please provide an email address', 400));
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(200).json({
         success: true,

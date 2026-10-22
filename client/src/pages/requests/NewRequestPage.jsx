@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAvailableDocumentTypes, createRequest } from '../../api/request.api';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import toast from 'react-hot-toast';
 import { FiFileText, FiArrowRight, FiArrowLeft, FiUploadCloud } from 'react-icons/fi';
 
 const NewRequestPage = () => {
@@ -215,7 +216,6 @@ const NewRequestPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
               {(selectedType.customFields || []).map((field, idx) => {
                 const fieldName = field.fieldName || field.name;
-                const fieldType = field.fieldType || field.type;
                 return (
                 <div key={idx}>
                   <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{field.label || fieldName}</h4>

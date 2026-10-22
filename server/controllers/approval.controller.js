@@ -8,12 +8,16 @@ const { sendApprovalEmail, sendRejectionEmail, sendCompletionEmail, sendRevision
 const { generateDocument } = require('../services/pdf.service');
 const { ErrorResponse } = require('../middleware/errorHandler');
 const crypto = require('crypto');
+const { validateFormData } = require('../services/requestValidation.service');
 
 exports.approveRequest = async (req, res, next) => {
   try {
     const request = await Request.findById(req.params.requestId).populate('student');
     if (!request) return next(new ErrorResponse('Request not found', 404));
 
+    if (!request.currentApprover || !['submitted', 'in_review'].includes(request.status)) {
+      return next(new ErrorResponse('This request is no longer awaiting approval', 409));
+    }
     if (request.currentApprover.toString() !== req.user._id.toString()) {
       return next(new ErrorResponse('Not authorized to approve this request', 403));
     }
@@ -93,6 +97,9 @@ exports.rejectRequest = async (req, res, next) => {
     const request = await Request.findById(req.params.requestId).populate('student');
     if (!request) return next(new ErrorResponse('Request not found', 404));
 
+    if (!request.currentApprover || !['submitted', 'in_review'].includes(request.status)) {
+      return next(new ErrorResponse('This request is no longer awaiting approval', 409));
+    }
     if (request.currentApprover.toString() !== req.user._id.toString()) {
       return next(new ErrorResponse('Not authorized to reject this request', 403));
     }
@@ -124,6 +131,9 @@ exports.requestRevision = async (req, res, next) => {
     const request = await Request.findById(req.params.requestId).populate('student');
     if (!request) return next(new ErrorResponse('Request not found', 404));
 
+    if (!request.currentApprover || !['submitted', 'in_review'].includes(request.status)) {
+      return next(new ErrorResponse('This request is no longer awaiting approval', 409));
+    }
     if (request.currentApprover.toString() !== req.user._id.toString()) {
       return next(new ErrorResponse('Not authorized', 403));
     }
@@ -163,11 +173,12 @@ exports.resubmitRequest = async (req, res, next) => {
       return next(new ErrorResponse('Request is not in revision state', 400));
     }
 
-    if (req.body.formData) {
+    const documentType = await DocumentType.findById(request.documentType);
+    if (req.body.formData !== undefined) {
+      const formValidationError = validateFormData(documentType, req.body.formData);
+      if (formValidationError) return next(new ErrorResponse(formValidationError, 400));
       request.formData = req.body.formData;
     }
-
-    const documentType = await DocumentType.findById(request.documentType);
     
     // Find the approver who requested revision based on history or reset to stage 1
     // Simplification: reset to stage 1

@@ -3,12 +3,14 @@ const DocumentType = require('../models/DocumentType');
 const Request = require('../models/Request');
 const { ErrorResponse } = require('../middleware/errorHandler');
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 exports.getAllUsers = async (req, res, next) => {
   try {
     const query = {};
     if (req.query.role) query.role = req.query.role;
     if (req.query.search) {
-      const term = req.query.search.trim();
+      const term = escapeRegex(req.query.search.trim());
       query.$or = [
         { name: { $regex: term, $options: 'i' } },
         { email: { $regex: term, $options: 'i' } },
@@ -57,11 +59,23 @@ exports.createUser = async (req, res, next) => {
 
 exports.updateUser = async (req, res, next) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    }).select('-password');
+    const user = await User.findById(req.params.id);
     if (!user) return next(new ErrorResponse('User not found', 404));
+    const editableFields = ['name', 'email', 'department', 'year', 'section', 'rollNumber', 'phone'];
+    for (const field of editableFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) user[field] = req.body[field];
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'role')) {
+      if (req.user.role !== 'super_admin') {
+        return next(new ErrorResponse('Only a super administrator can change user roles', 403));
+      }
+      user.role = req.body.role;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'password')) {
+      return next(new ErrorResponse('Use the account password reset flow to change a password', 400));
+    }
+    await user.save();
+    user.password = undefined;
     res.status(200).json({ success: true, data: user });
   } catch (error) {
     next(error);

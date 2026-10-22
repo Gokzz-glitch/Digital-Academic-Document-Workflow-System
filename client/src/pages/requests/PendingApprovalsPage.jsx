@@ -1,21 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { getPendingApprovals } from '../../api/request.api';
 import DataTable from '../../components/DataTable';
-import StatusBadge from '../../components/StatusBadge';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { FiFilter } from 'react-icons/fi';
 
 const PendingApprovalsPage = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ page: 1, limit: 10 });
   const navigate = useNavigate();
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const res = await getPendingApprovals(filters);
+      const res = await getPendingApprovals({ page: 1, limit: 10 });
       setRequests(res.data.data.requests || []);
     } catch (error) {
       console.error('Failed to fetch pending approvals', error);
@@ -26,7 +23,7 @@ const PendingApprovalsPage = () => {
 
   useEffect(() => {
     fetchRequests();
-  }, [filters]);
+  }, []);
 
   const columns = [
     { header: 'Student', cell: (row) => <div><p className="font-medium text-slate-800">{row.student?.name}</p><p className="text-xs text-slate-500">{row.student?.rollNumber}</p></div> },
@@ -53,13 +50,6 @@ const PendingApprovalsPage = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Pending Approvals</h1>
         <p className="text-slate-500 text-sm mt-1">Requests waiting for your review and action.</p>
-      </div>
-
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <FiFilter className="text-slate-400" />
-          <span>Filters can be applied here</span>
-        </div>
       </div>
 
       <DataTable 
